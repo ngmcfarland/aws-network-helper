@@ -416,4 +416,15 @@ def get_ephemeral_ports(platform):
 
 
 if __name__ == '__main__':
-    troubleshoot(sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4],sys.argv[5])
+    if len(sys.argv) == 2:
+        troubleshoot(sys.argv[1],sys.argv[2])
+    elif len(sys.argv) == 3:
+        troubleshoot(sys.argv[1],sys.argv[2],sys.argv[3])
+    elif len(sys.argv) == 4:
+        troubleshoot(sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4])
+    elif len(sys.argv) == 5:
+        troubleshoot(sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4],sys.argv[5])
+    elif len(sys.argv) == 6:
+        troubleshoot(sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4],sys.argv[5],sys.argv[6])
+    else:
+        print('Usage:\n> python check_aws_network.py <source_name> <destination_name> [<port> <source_type> <destination_type> <ip_protocol>]')
