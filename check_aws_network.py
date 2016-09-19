@@ -17,37 +17,50 @@ logging.basicConfig(filename=logfile, filemode='w', format='%(asctime)s | %(leve
 
 def troubleshoot(source_name,destination_name,port=None,source_type='UNKNOWN',destination_type='UNKNOWN',ip_protocol='tcp'):
     proceed = True
+    response = []
+    looks_good = []
+    needs_work = []
+    recommendations = []
     #
     # Get metadata for source and destination instances
-    logger.info("Starting metadata gathering for {} and {}".format(source_name,destination_name))
+    logging.info("Starting metadata gathering for {} and {}".format(source_name,destination_name))
     source_metadata = get_instance_metadata(source_name,source_type)
     if 'error_type' in source_metadata:
-        logger.error("Error in obtaining metadata for {}:".format(source_name))
-        logger.error("{}: {}".format(source_metadata['error_type'],source_metadata['error_msg']))
+        logging.error("Error in obtaining metadata for {}:".format(source_name))
+        logging.error("{}: {}".format(source_metadata['error_type'],source_metadata['error_msg']))
         proceed = False
     else:
-        logger.info("Obtained metadata for {} successfully".format(source_name))
-        logger.debug("Instance type for {}: {}".format(source_name,source_metadata['instance_type']))
+        logging.info("Obtained metadata for {} successfully".format(source_name))
+        logging.debug("Instance type for {}: {}".format(source_name,source_metadata['instance_type']))
     destination_metadata = get_instance_metadata(destination_name,destination_type)
     if 'error_type' in destination_metadata:
-        logger.error("Error in obtaining metadata for {}:".format(destination_name))
-        logger.error("{}: {}".format(destination_metadata['error_type'],destination_metadata['error_msg']))
+        logging.error("Error in obtaining metadata for {}:".format(destination_name))
+        logging.error("{}: {}".format(destination_metadata['error_type'],destination_metadata['error_msg']))
         proceed = False
     else:
-        logger.info("Obtained metadata for {} successfully".format(destination_name))
-        logger.debug("Instance type for {}: {}".format(destination_name,destination_metadata['instance_type']))
+        logging.info("Obtained metadata for {} successfully".format(destination_name))
+        logging.debug("Instance type for {}: {}".format(destination_name,destination_metadata['instance_type']))
+    #
+    # Check if source and destination are both in the same VPC
+    if proceed:
+        logging.info("Checking if {} and {} are in the same AWS VPC".format(source_name,destination_name))
+        if source_metadata['vpc_id'] != destination_metadata['vpc_id']:
+            logging.error("{} and {} are not in the same VPC. Cross VPC connections are not supported by this script".format(source_name,destination_name))
+            return "I'm sorry. These two instances are not in the same VPC. I can only troubleshoot connections for instances in the same VPC."
+        else:
+            logging.info("{} and {} are in the same VPC ({})".format(source_name,destination_name,source_metadata['vpc_id']))
     #
     # Use default ports if no port passed in
     if proceed:
         if not port:
-            logger.debug("No port provided. Determining default connection port based on destination")
+            logging.debug("No port provided. Determining default connection port based on destination")
             if destination_metadata['instance_type'] == 'EC2':
                 if destination_metadata['platform'].lower() == 'linux':
                     port = 22
                 elif destination_metadata['platform'].lower() == 'windows':
                     port = 3389
                 else:
-                    logger.error("No default port known for EC2 platform {}".format(destination_metadata['platform']))
+                    logging.error("No default port known for EC2 platform {}".format(destination_metadata['platform']))
                     proceed = False
             elif destination_metadata['instance_type'] == 'RDS':
                 if re.search(r"oracle",destination_metadata['engine'],re.IGNORECASE):
@@ -59,62 +72,73 @@ def troubleshoot(source_name,destination_name,port=None,source_type='UNKNOWN',de
                 elif re.search(r"sqlserver",destination_metadata['engine'],re.IGNORECASE):
                     port = 1433
                 else:
-                    logger.error("No default port known for RDS engine {}".format(destination_metadata['engine']))
+                    logging.error("No default port known for RDS engine {}".format(destination_metadata['engine']))
                     proceed = False
         if port:
-            logger.info("Using port {} for evaluation".format(port))
+            logging.info("Using port {} for evaluation".format(port))
     #
     # Check instance health for source and destination
     if proceed:
-        logger.info("Checking instance health for {} and {}".format(source_name,destination_name))
+        logging.info("Checking instance health for {} and {}".format(source_name,destination_name))
         source_health = check_health(source_metadata['instance_type'],source_metadata['status'])
-        if not source_health['healthy']:
-            logger.info("Source instance {} is unavailable with a status of '{}'".format(source_name,source_health['status']))
-            proceed = False
-        else:
-            logger.info("Source instance {} is available with a status of '{}'".format(source_name,source_health['status']))
         destination_health = check_health(destination_metadata['instance_type'],destination_metadata['status'])
-        if not destination_health['healthy']:
-            logger.info("Destination instance {} is unavailable with a status of '{}'".format(destination_name,destination_health['status']))
-            proceed = False
+        if source_health['healthy'] and destination_health['healthy']:
+            looks_good.append('instance health checks')
+            logging.info("Source instance {} is available with a status of '{}'".format(source_name,source_health['status']))
+            logging.info("Destination instance {} is available with a status of '{}'".format(destination_name,destination_health['status']))
         else:
-            logger.info("Destination instance {} is available with a status of '{}'".format(destination_name,destination_health['status']))
-    #
-    # Check if source and destination are both in the same VPC
-    if proceed:
-        logger.info("Checking if {} and {} are in the same AWS VPC".format(source_name,destination_name))
-        if source_metadata['vpc_id'] != destination_metadata['vpc_id']:
-            logger.error("{} and {} are not in the same VPC. Cross VPC connections are not supported by this script".format(source_name,destination_name))
-            proceed = False
-        else:
-            logger.info("{} and {} are in the same VPC ({})".format(source_name,destination_name,source_metadata['vpc_id']))
+            needs_work.append('instance health')
+            if not source_health['healthy']:
+                logging.info("Source instance {} is unavailable with a status of '{}'".format(source_name,source_health['status']))
+                recommendations.append("Check health of {}. Current status: {}".format(source_name,source_health['status']))
+                proceed = False
+            if not destination_health['healthy']:
+                logging.info("Destination instance {} is unavailable with a status of '{}'".format(destination_name,destination_health['status']))
+                recommendations.append("Check health of {}. Current status: {}".format(source_name,source_health['status']))
+                proceed = False
     #
     # Check if source and destination are both in the same Subnet
     if proceed:
-        logger.info("Checking if {} and {} are in the same VPC subnet".format(source_name,destination_name))
+        logging.info("Checking if {} and {} are in the same VPC subnet".format(source_name,destination_name))
         if source_metadata['subnet_id'] == destination_metadata['subnet_id']:
-            logger.info("{} and {} are in the same subnet ({}). Network ACLs do not need to be checked".format(source_name,destination_name,source_metadata['subnet_id']))
+            logging.info("{} and {} are in the same subnet ({}). Network ACLs do not need to be checked".format(source_name,destination_name,source_metadata['subnet_id']))
         else:
             #
             # Check Network ACL Rules
-            logger.info("{} and {} are not in the same subnet".format(source_name,destination_name))
-            logger.info("Checking network ACLs")
-            acl_traffic_allowed,reasons = check_network_acls(source_metadata['subnet_id'],source_metadata['ip_address'],destination_metadata['subnet_id'],destination_metadata['ip_address'],port,source_metadata['vpc_id'],source_metadata['platform'],ip_protocol)
+            logging.info("{} and {} are not in the same subnet".format(source_name,destination_name))
+            logging.info("Checking network ACLs")
+            acl_traffic_allowed,recommendations = check_network_acls(source_metadata,destination_metadata,port,ip_protocol,recommendations)
             if acl_traffic_allowed:
-                logger.info("Traffic is allowed through network ACLs on {} port {} between {} and {}".format(ip_protocol.upper(),port,source_name,destination_name))
+                logging.info("Traffic is allowed through network ACLs on {} port {} between {} and {}".format(ip_protocol.upper(),port,source_name,destination_name))
+                looks_good.append('network ACLs')
             else:
-                logger.info("Traffic is not allowed through network ACLs on {} port {} between {} and {} for the following reasons:".format(ip_protocol.upper(),port,source_name,destination_name))
-                for reason in reasons:
-                    logger.info(" - {}".format(reason))
+                logging.info("Traffic is not allowed through network ACLs on {} port {} between {} and {}. Recommending:".format(ip_protocol.upper(),port,source_name,destination_name))
+                needs_work.append('network ACLs')
+                for recommendation in recommendations:
+                    logging.info(" - {}".format(recommendation))
         #
         # Check Security Group Rules
-        sg_traffic_allowed,reasons = check_security_groups(source_metadata['security_group_ids'],source_metadata['ip_address'],destination_metadata['security_group_ids'],destination_metadata['ip_address'],port,ip_protocol)
+        sg_traffic_allowed,recommendations = check_security_groups(source_metadata,destination_metadata,port,ip_protocol,recommendations)
         if sg_traffic_allowed:
-            logger.info("Traffic is allowed through security groups on {} port {} between {} and {}".format(ip_protocol.upper(),port,source_name,destination_name))
+            logging.info("Traffic is allowed through security groups on {} port {} between {} and {}".format(ip_protocol.upper(),port,source_name,destination_name))
+            looks_good.append('security groups')
         else:
-            logger.info("Traffic is not allowed through security groups on {} port {} between {} and {} for the following reasons:".format(ip_protocol.upper(),port,source_name,destination_name))
-            for reason in reasons:
-                logger.info(" - {}".format(reason))
+            logging.info("Traffic is not allowed through security groups on {} port {} between {} and {} for the following reasons:".format(ip_protocol.upper(),port,source_name,destination_name))
+            needs_work.append('security groups')
+            for recommendation in recommendations:
+                logging.info(" - {}".format(recommendation))
+    #
+    # Compile results
+    if len(looks_good) > 0:
+        response.append("Your {} look good.".format(format_list(looks_good)))
+    if len(needs_work) > 0:
+        response.append("I have some recommendations about your {}:".format(format_list(needs_work)))
+        for recommendation in recommendations:
+            response.append(" - {}".format(recommendation))
+    else:
+        response.append("You should be able to connect.")
+    return "\n".join(response)
+
 
 
 def get_ec2_metadata(instance_name):
@@ -258,43 +282,41 @@ def check_health(instance_type,instance_status):
         return {'healthy':False,'status':'Unknown'}
 
 
-def check_security_groups(source_security_groups,source_ip,destination_security_groups,destination_ip,port,ip_protocol):
-    reasons = []
-    source_ingress,source_egress = get_inbound_outbound_rules('SG',source_security_groups)
-    destination_ingress,destination_egress = get_inbound_outbound_rules('SG',destination_security_groups)
-    source_egress_allowed = loop_through_rules(object_type='SG',rule_list=source_egress,port=port,target_ip=destination_ip,target_sgs=destination_security_groups,ip_protocol=ip_protocol)
-    destination_ingress_allowed = loop_through_rules(object_type='SG',rule_list=destination_ingress,port=port,target_ip=source_ip,target_sgs=source_security_groups,ip_protocol=ip_protocol)
+def check_security_groups(source_metadata,destination_metadata,port,ip_protocol,recommendations):
+    source_ingress,source_egress = get_inbound_outbound_rules('SG',source_metadata['security_group_ids'])
+    destination_ingress,destination_egress = get_inbound_outbound_rules('SG',destination_metadata['security_group_ids'])
+    source_egress_allowed = loop_through_rules(object_type='SG',rule_list=source_egress,port=port,target_ip=destination_metadata['ip_address'],target_sgs=destination_metadata['security_group_ids'],ip_protocol=ip_protocol)
+    destination_ingress_allowed = loop_through_rules(object_type='SG',rule_list=destination_ingress,port=port,target_ip=source_metadata['ip_address'],target_sgs=source_metadata['security_group_ids'],ip_protocol=ip_protocol)
     if not source_egress_allowed:
-        reasons.append("Outbound traffic to destination not allowed on source's security group for {} port {}".format(ip_protocol.upper(),port))
+        recommendations.append("Allow outbound traffic to {} on {}'s security group for {} port {}".format(destination_metadata['instance_name'],source_metadata['instance_name'],ip_protocol.upper(),port))
     if not destination_ingress_allowed:
-        reasons.append("Inbound traffic from source not allowed on destination's security group for {} port {}".format(ip_protocol.upper(),port))
+        recommendations.append("Allow inbound traffic from {} on {}'s security group for {} port {}".format(source_metadata['instance_name'],destination_metadata['instance_name'],ip_protocol.upper(),port))
     if source_egress_allowed and destination_ingress_allowed:
-        return True,reasons
+        return True,recommendations
     else:
-        return False,reasons
+        return False,recommendations
 
 
-def check_network_acls(source_subnet_id,source_ip,destination_subnet_id,destination_ip,port,vpc_id,source_platform,ip_protocol):
-    reasons = []
-    source_ephemeral = get_ephemeral_ports(source_platform)
-    source_ingress,source_egress = get_inbound_outbound_rules('ACL',source_subnet_id,vpc_id)
-    destination_ingress,destination_egress = get_inbound_outbound_rules('ACL',destination_subnet_id,vpc_id)
-    source_egress_allowed = loop_through_rules(object_type='ACL',rule_list=source_egress,port=port,target_ip=destination_ip,ip_protocol=ip_protocol)
-    destination_ingress_allowed = loop_through_rules(object_type='ACL',rule_list=destination_ingress,port=port,target_ip=source_ip,ip_protocol=ip_protocol)
-    destination_egress_allowed = loop_through_rules(object_type='ACL',rule_list=destination_egress,port=port,target_ip=source_ip,ephemeral_ports=source_ephemeral,ip_protocol=ip_protocol)
-    source_ingress_allowed = loop_through_rules(object_type='ACL',rule_list=source_ingress,port=port,target_ip=destination_ip,ephemeral_ports=source_ephemeral,ip_protocol=ip_protocol)
+def check_network_acls(source_metadata,destination_metadata,port,ip_protocol,recommendations):
+    source_ephemeral = get_ephemeral_ports(source_metadata['platform'])
+    source_ingress,source_egress = get_inbound_outbound_rules('ACL',source_metadata['subnet_id'],source_metadata['vpc_id'])
+    destination_ingress,destination_egress = get_inbound_outbound_rules('ACL',destination_metadata['subnet_id'],destination_metadata['vpc_id'])
+    source_egress_allowed = loop_through_rules(object_type='ACL',rule_list=source_egress,port=port,target_ip=destination_metadata['ip_address'],ip_protocol=ip_protocol)
+    destination_ingress_allowed = loop_through_rules(object_type='ACL',rule_list=destination_ingress,port=port,target_ip=source_metadata['ip_address'],ip_protocol=ip_protocol)
+    destination_egress_allowed = loop_through_rules(object_type='ACL',rule_list=destination_egress,port=port,target_ip=source_metadata['ip_address'],ephemeral_ports=source_ephemeral,ip_protocol=ip_protocol)
+    source_ingress_allowed = loop_through_rules(object_type='ACL',rule_list=source_ingress,port=port,target_ip=destination_metadata['ip_address'],ephemeral_ports=source_ephemeral,ip_protocol=ip_protocol)
     if not source_egress_allowed:
-        reasons.append("Outbound traffic to destination not allowed on source's ACL for {} port {}".format(ip_protocol.upper(),port))
+        recommendations.append("Allow outbound traffic to {} on {}'s ACL for {} port {}".format(destination_metadata['instance_name'],source_metadata['instance_name'],ip_protocol.upper(),port))
     if not destination_ingress_allowed:
-        reasons.append("Inbound traffic from source not allowed on destination's ACL for {} port {}".format(ip_protocol.upper(),port))
+        recommendations.append("Allow inbound traffic from {} on {}'s ACL for {} port {}".format(source_metadata['instance_name'],destination_metadata['instance_name'],ip_protocol.upper(),port))
     if not destination_egress_allowed:
-        reasons.append("Outbound traffic to source not allowed on destination's ACL for {} ephemeral ports".format(ip_protocol.upper()))
+        recommendations.append("Allow outbound traffic to {} on {}'s ACL for {} ephemeral port range: {}-{}".format(source_metadata['instance_name'],destination_metadata['instance_name'],ip_protocol.upper(),source_ephemeral['from'],source_ephemeral['to']))
     if not source_ingress_allowed:
-        reasons.append("Inbound traffic from destination not allowed on source's ACL for {} ephemeral ports".format(ip_protocol.upper()))
+        recommendations.append("Allow inbound traffic from {} on {}'s ACL for {} ephemeral port range: {}-{}".format(destination_metadata['instance_name'],source_metadata['instance_name'],ip_protocol.upper(),source_ephemeral['from'],source_ephemeral['to']))
     if source_egress_allowed and source_ingress_allowed and destination_egress_allowed and destination_ingress_allowed:
-        return True,reasons
+        return True,recommendations
     else:
-        return False,reasons
+        return False,recommendations
 
 
 def get_inbound_outbound_rules(object_type,object_ids,vpc_id=None):
@@ -437,6 +459,16 @@ def get_ephemeral_ports(platform):
     else:
         ephemeral_ports = {'from':1024,'to':65535}
     return ephemeral_ports
+
+
+def format_list(the_list):
+    if len(the_list) > 1:
+        result = "{} and {}".format(", ".join(the_list[:-1]),the_list[-1])
+    elif len(the_list) == 1:
+        result = the_list[0]
+    else:
+        result = None
+    return result
 
 
 if __name__ == '__main__':
