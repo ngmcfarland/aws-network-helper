@@ -1,3 +1,4 @@
+from conf import check_aws_network_config as config
 import netaddr
 import logging
 import boto3
@@ -6,8 +7,8 @@ import sys
 import re
 
 
-logfile = "check_aws_network.log"
-logging_level = 'DEBUG'
+logfile = config.logging_file
+logging_level = config.logging_level
 numeric_level = getattr(logging, logging_level.upper(), None)
 if not isinstance(numeric_level, int):
     raise ValueError('Invalid log level: {}'.format(logging_level))
@@ -130,13 +131,26 @@ def troubleshoot(source_name,destination_name,port=None,source_type='UNKNOWN',de
     #
     # Compile results
     if len(looks_good) > 0:
-        response.append("Your {} look good.".format(format_list(looks_good)))
+        response.append("I've checked your {} and everything there looks good.".format(format_list(looks_good)))
     if len(needs_work) > 0:
-        response.append("I have some recommendations about your {}:".format(format_list(needs_work)))
+        response.append("However, I have some recommendations about your {}:".format(format_list(needs_work)))
         for recommendation in recommendations:
             response.append(" - {}".format(recommendation))
     else:
-        response.append("You should be able to connect.")
+        if destination_metadata['instance_type'] != 'UNKNOWN':
+            response.append("Based on everything I've looked at, you should be able to connect. If you are still having issues, here are some general things to check:")
+            if destination_metadata['instance_type'] == 'EC2':
+                for recommendation in config.general_recommendations['EC2']['recommendations']:
+                    response.append(" - {}".format(recommendation))
+            elif destination_metadata['instance_type'] == 'RDS':
+                for recommendation in config.general_recommendations['RDS']['recommendations']:
+                    response.append(" - {}".format(recommendation))
+        else:
+            response.append("Based on everything I've looked at, you shoudl be able to connect.")
+    if destination_metadata['instance_type'] == 'EC2':
+        response.append("Additional Documentation: {}".format(config.general_recommendations['EC2']['url']))
+    elif destination_metadata['instance_type'] == 'RDS':
+        response.append("Additional Documentation: {}".format(config.general_recommendations['RDS']['url']))
     return "\n".join(response)
 
 
@@ -450,15 +464,13 @@ def loop_through_rules(object_type,rule_list,port,target_ip=None,target_sgs=None
 
 
 def get_ephemeral_ports(platform):
-    if platform.upper() == 'LINUX':
-        ephemeral_ports = {'from':32768,'to':61000}
-    elif platform.upper() == 'WINDOWS':
-        ephemeral_ports = {'from':49152,'to':65535}
-    elif platform.upper() == 'UNKNOWN':
+    try:
+        ephemeral_index = config.ephemeral_index
+        ephemeral_ports = ephemeral_index[platform.upper()]
+    except:
         ephemeral_ports = {'from':1024,'to':65535}
-    else:
-        ephemeral_ports = {'from':1024,'to':65535}
-    return ephemeral_ports
+    finally:
+        return ephemeral_ports
 
 
 def format_list(the_list):
@@ -483,4 +495,4 @@ if __name__ == '__main__':
     elif len(sys.argv) == 6:
         troubleshoot(sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4],sys.argv[5],sys.argv[6])
     else:
-        print('Usage:\n> python check_aws_network.py <source_name> <destination_name> [<port> <source_type> <destination_type> <ip_protocol>]')
+        print('Usage:\n> {}'.format(config.usage))

@@ -1,0 +1,9 @@
+usage = "python check_aws_network.py <source_name> <destination_name> [<port> <source_type> <destination_type> <ip_protocol>]"
+logging_file = 'log/check_aws_network.log'
+logging_level = 'DEBUG'
+ephemeral_index = {'LINUX':{'from':32768,'to':61000},'WINDOWS':{'from':49152,'to':65535},'UNKNOWN':{'from':1024,'to':65535}}
+ec2_general_recommendations = ["Verify that the keypair you are using matches the keypair for your destination.","If you are trying to connect to your destination instance from inside the VPC, make sure you are using the private IP address.","Check the CPU load on your destination instance using CloudWatch to make sure that your instance is truly healthy."]
+ec2_troubleshoot_url = "http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/TroubleshootingInstancesConnecting.html"
+rds_general_recommendations = ["Check available storage for your RDS instance using the AWS console. If your instance is low on storage, it may impact the ability to connect."]
+rds_troubleshoot_url = "http://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_Troubleshooting.html"
+general_recommendations = {'EC2':{'recommendations':ec2_general_recommendations,'url':ec2_troubleshoot_url},'RDS':{'recommendations':rds_general_recommendations,'url':rds_troubleshoot_url}}
