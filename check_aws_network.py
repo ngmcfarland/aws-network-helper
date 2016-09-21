@@ -32,7 +32,7 @@ def troubleshoot(source_name,destination_name,port=None,source_type='UNKNOWN',de
         proceed = False
     else:
         logging.info("Obtained metadata for {} successfully".format(source_name))
-        logging.debug("Instance type for {}: {}".format(source_name,source_metadata['instance_type']))
+        logging.info("Instance type for {}: {}".format(source_name,source_metadata['instance_type']))
     destination_metadata = get_instance_metadata(destination_name,destination_type)
     if 'error_type' in destination_metadata:
         logging.error("Error in obtaining metadata for {}:".format(destination_name))
@@ -40,7 +40,7 @@ def troubleshoot(source_name,destination_name,port=None,source_type='UNKNOWN',de
         proceed = False
     else:
         logging.info("Obtained metadata for {} successfully".format(destination_name))
-        logging.debug("Instance type for {}: {}".format(destination_name,destination_metadata['instance_type']))
+        logging.info("Instance type for {}: {}".format(destination_name,destination_metadata['instance_type']))
     #
     # Check if source and destination are both in the same VPC
     if proceed:
@@ -54,7 +54,7 @@ def troubleshoot(source_name,destination_name,port=None,source_type='UNKNOWN',de
     # Use default ports if no port passed in
     if proceed:
         if not port:
-            logging.debug("No port provided. Determining default connection port based on destination")
+            logging.info("No port provided. Determining default connection port based on destination")
             if destination_metadata['instance_type'] == 'EC2':
                 if destination_metadata['platform'].lower() == 'linux':
                     port = 22
@@ -66,7 +66,7 @@ def troubleshoot(source_name,destination_name,port=None,source_type='UNKNOWN',de
             elif destination_metadata['instance_type'] == 'RDS':
                 if re.search(r"oracle",destination_metadata['engine'],re.IGNORECASE):
                     port = 1521
-                elif re.search(r"[mysql|aurora|mariadb]",destination_metadata['engine'],re.IGNORECASE):
+                elif re.search(r"(mysql|aurora|mariadb)",destination_metadata['engine'],re.IGNORECASE):
                     port = 3306
                 elif re.search(r"postgres",destination_metadata['engine'],re.IGNORECASE):
                     port = 5432
@@ -95,7 +95,7 @@ def troubleshoot(source_name,destination_name,port=None,source_type='UNKNOWN',de
                 proceed = False
             if not destination_health['healthy']:
                 logging.info("Destination instance {} is unavailable with a status of '{}'".format(destination_name,destination_health['status']))
-                recommendations.append("Check health of {}. Current status: {}".format(source_name,source_health['status']))
+                recommendations.append("Check health of {}. Current status: {}".format(destination_name,destination_health['status']))
                 proceed = False
     #
     # Check if source and destination are both in the same Subnet
@@ -146,7 +146,7 @@ def troubleshoot(source_name,destination_name,port=None,source_type='UNKNOWN',de
                 for recommendation in config.general_recommendations['RDS']['recommendations']:
                     response.append(" - {}".format(recommendation))
         else:
-            response.append("Based on everything I've looked at, you shoudl be able to connect.")
+            response.append("Based on everything I've looked at, you should be able to connect.")
     if destination_metadata['instance_type'] == 'EC2':
         response.append("Additional Documentation: {}".format(config.general_recommendations['EC2']['url']))
     elif destination_metadata['instance_type'] == 'RDS':
@@ -387,11 +387,15 @@ def get_inbound_outbound_rules(object_type,object_ids,vpc_id=None):
                             else:
                                 if entry['Protocol'] == '1':
                                     metadata['ip_protocol'] = 'icmp'
+                                    # Need to add port range logic
                                 elif entry['Protocol'] == '6':
                                     metadata['ip_protocol'] = 'tcp'
+                                    metadata['port_range'] = {'from':entry['PortRange']['From'],'to':entry['PortRange']['To']}
                                 elif entry['Protocol'] == '17':
                                     metadata['ip_protocol'] = 'udp'
-                                metadata['port_range'] = {'from':entry['PortRange']['From'],'to':entry['PortRange']['To']}
+                                    # Need to add port range logic
+                                # else:
+                                #       Need to add other protocol logic
                             if entry['RuleAction'] == 'allow':
                                 metadata['allow'] = True
                             else:
@@ -411,55 +415,59 @@ def loop_through_rules(object_type,rule_list,port,target_ip=None,target_sgs=None
         for rule in sorted(rule_list, key=lambda acl_rule: acl_rule['rule_number']):
             match_found = False
             port_match = False
-            if rule['ip_protocol'].lower() not in ['all',ip_protocol.lower()]:
-                break
-            if ephemeral_ports:
-                port_match = rule['port_range']['from'] <= ephemeral_ports['from'] and rule['port_range']['to'] >= ephemeral_ports['to']
-            else:
-                port_match = rule['port_range']['from'] <= port <= rule['port_range']['to']
-            if port_match:
-                for grantee in rule['grantees']:
-                    if target_ip['type'] == 'ip':
-                        if netaddr.IPAddress(target_ip['value']) in netaddr.IPNetwork(grantee['value']):
-                            if rule['allow']:
-                                traffic_allowed = True
-                                match_found = True
-                                break
-                            else:
-                                match_found = True
-                                break
-                    elif target_ip['type'] == 'cidr':
-                        if netaddr.IPNetwork(target_ip['value']) in netaddr.IPNetwork(grantee['value']):
-                            if rule['allow']:
-                                traffic_allowed = True
-                                match_found = True
-                                break
-                            else:
-                                match_found = True
-                                break
-                if match_found:
-                    break
-    elif object_type == 'SG':
-        for rule in rule_list:
-            if rule['ip_protocol'].lower() not in ['all',ip_protocol.lower()]:
-                break
-            if rule['port_range']['from'] <= port <= rule['port_range']['to']:
-                for grantee in rule['grantees']:
-                    if grantee['type'] == 'sg':
-                        if grantee['value'] in target_sgs:
-                            traffic_allowed = True
-                            break
-                    elif grantee['type'] == 'cidr':
+            if rule['ip_protocol'].lower() in ['all',ip_protocol.lower()]:
+                if ephemeral_ports:
+                    logging.info("Checking if {}-{} in {}-{}".format(ephemeral_ports['from'],ephemeral_ports['to'],rule['port_range']['from'],rule['port_range']['to']))
+                    port_match = rule['port_range']['from'] <= ephemeral_ports['from'] and rule['port_range']['to'] >= ephemeral_ports['to']
+                    logging.info("port_match = {}".format(port_match))
+                else:
+                    logging.info("Checking if {} in {}-{}".format(port,rule['port_range']['from'],rule['port_range']['to']))
+                    port_match = rule['port_range']['from'] <= port <= rule['port_range']['to']
+                    logging.info("port_match = {}".format(port_match))
+                if port_match:
+                    for grantee in rule['grantees']:
                         if target_ip['type'] == 'ip':
                             if netaddr.IPAddress(target_ip['value']) in netaddr.IPNetwork(grantee['value']):
-                                traffic_allowed = True
-                                break
+                                if rule['allow']:
+                                    traffic_allowed = True
+                                    match_found = True
+                                    logging.info("Traffic Allowed: {} in {}".format(target_ip['value'],grantee['value']))
+                                    break
+                                else:
+                                    match_found = True
+                                    break
                         elif target_ip['type'] == 'cidr':
                             if netaddr.IPNetwork(target_ip['value']) in netaddr.IPNetwork(grantee['value']):
+                                if rule['allow']:
+                                    traffic_allowed = True
+                                    match_found = True
+                                    logging.info("Traffic Allowed: {} in {}".format(target_ip['value'],grantee['value']))
+                                    break
+                                else:
+                                    match_found = True
+                                    break
+                    if match_found:
+                        break
+    elif object_type == 'SG':
+        for rule in rule_list:
+            if rule['ip_protocol'].lower() in ['all',ip_protocol.lower()]:
+                if rule['port_range']['from'] <= port <= rule['port_range']['to']:
+                    for grantee in rule['grantees']:
+                        if grantee['type'] == 'sg':
+                            if grantee['value'] in target_sgs:
                                 traffic_allowed = True
                                 break
-            if traffic_allowed:
-                break
+                        elif grantee['type'] == 'cidr':
+                            if target_ip['type'] == 'ip':
+                                if netaddr.IPAddress(target_ip['value']) in netaddr.IPNetwork(grantee['value']):
+                                    traffic_allowed = True
+                                    break
+                            elif target_ip['type'] == 'cidr':
+                                if netaddr.IPNetwork(target_ip['value']) in netaddr.IPNetwork(grantee['value']):
+                                    traffic_allowed = True
+                                    break
+                if traffic_allowed:
+                    break
     return traffic_allowed
 
 
