@@ -1,3 +1,4 @@
+from conf import aws_network_helper_config as conf
 import check_aws_network
 import requests
 import logging
@@ -11,20 +12,23 @@ logger.setLevel(logging.DEBUG)
 def lambda_handler(event,context):
     lambda_message = json.loads(event['Records'][0]['Sns']['Message'])
     logger.info("Starting Lambda...")
-    r = requests.post(lambda_message['response_url'][0],data=json.dumps({'text':'Hold on, let me check...'}))
     if lambda_message['command'][0] == '/aws-network':
         logger.info("Slack Slash Command: {}".format(lambda_message['command'][0]))
-        results = match_input(lambda_message['text'][0])
-        logger.debug("Results from match_input: {}".format(results))
-        if results['match']:
-            if results['source'] and results['destination'] and results['port'] and results['ip_protocol']:
-                response = check_aws_network.troubleshoot(source_name=results['source'],destination_name=results['destination'],port=results['port'],ip_protocol=results['ip_protocol'])
-            elif results['source'] and results['destination'] and results['port']:
-                response = check_aws_network.troubleshoot(source_name=results['source'],destination_name=results['destination'],port=results['port'])
-            else:
-                response = check_aws_network.troubleshoot(source_name=results['source'],destination_name=results['destination'])
+        if lambda_message['text'][0].upper() == 'HELP':
+            response = conf.help_message
         else:
-            response = "I'm sorry, I don't recognize what you're asking."
+            r = requests.post(lambda_message['response_url'][0],data=json.dumps({'text':'Hold on, let me check some things...'}))
+            results = match_input(lambda_message['text'][0])
+            logger.debug("Results from match_input: {}".format(results))
+            if results['match']:
+                if results['source'] and results['destination'] and results['port'] and results['ip_protocol']:
+                    response = check_aws_network.troubleshoot(source_name=results['source'],destination_name=results['destination'],port=results['port'],ip_protocol=results['ip_protocol'])
+                elif results['source'] and results['destination'] and results['port']:
+                    response = check_aws_network.troubleshoot(source_name=results['source'],destination_name=results['destination'],port=results['port'])
+                else:
+                    response = check_aws_network.troubleshoot(source_name=results['source'],destination_name=results['destination'])
+            else:
+                response = "I'm sorry, I don't recognize what you're asking."
     else:
         response = "I'm sorry, I don't recognize the command: {}".format(command)
     response_body = {'text':response}
