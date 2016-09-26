@@ -2,6 +2,8 @@ from conf import aws_network_helper_config as conf
 import check_aws_network
 import requests
 import logging
+import base64
+import boto3
 import json
 import sys
 import re
@@ -12,13 +14,17 @@ logger.setLevel(logging.DEBUG)
 def lambda_handler(event,context):
     lambda_message = json.loads(event['Records'][0]['Sns']['Message'])
     logger.info("Starting Lambda...")
-    if lambda_message['command'][0] == '/aws-network':
-        logger.info("Slack Slash Command: {}".format(lambda_message['command'][0]))
-        if lambda_message['text'][0].upper() == 'HELP':
+    s3_conf = get_config()
+    slack_response_url = decrypt_config_value(lambda_message['response_url'],s3_conf['kms_region'])
+    if not validate_slack_domain(slack_response_url):
+        raise Exception("Invalid Slack Response URL!")
+    if lambda_message['command'] == '/aws-network':
+        logger.info("Slack Slash Command: {}".format(lambda_message['command']))
+        if lambda_message['text'].upper() == 'HELP':
             response = conf.help_message
         else:
-            r = requests.post(lambda_message['response_url'][0],data=json.dumps({'text':'Hold on, let me check some things...'}))
-            results = match_input(lambda_message['text'][0])
+            r = requests.post(slack_response_url,data=json.dumps({'text':'Hold on, let me check some things...'}))
+            results = match_input(lambda_message['text'])
             logger.debug("Results from match_input: {}".format(results))
             if results['match']:
                 if results['source'] and results['destination'] and results['port'] and results['ip_protocol']:
@@ -33,8 +39,28 @@ def lambda_handler(event,context):
         response = "I'm sorry, I don't recognize the command: {}".format(command)
     response_body = {'text':response}
     logger.info("Sending response: {}".format(response_body))
-    r = requests.post(lambda_message['response_url'][0],data=json.dumps(response_body))
+    r = requests.post(slack_response_url,data=json.dumps(response_body))
     logger.info("Response from Slack response URL post: {}".format(r.text))
+
+
+def get_config():
+    sts_client = boto3.client('sts')
+    response = sts_client.get_caller_identity()
+    s3_bucket = "aws-network-helper-{}".format(response['Account'])
+    s3 = boto3.resource('s3')
+    s3_object = s3.Object(s3_bucket,'conf/aws-network-helper-config.json')
+    contents = json.loads(s3_object.get()['Body'].read())
+    return contents
+
+
+def decrypt_config_value(encrypted_value,region):
+    kms_client = boto3.client('kms',region_name=region)
+    return kms_client.decrypt(CiphertextBlob=base64.b64decode(encrypted_value))['Plaintext']
+
+
+def validate_slack_domain(response_url):
+    slack_domain = re.compile(r"^https://hooks.slack.com/.*",re.IGNORECASE)
+    return True if slack_domain.match(response_url) else False
 
 
 def match_input(user_input):
