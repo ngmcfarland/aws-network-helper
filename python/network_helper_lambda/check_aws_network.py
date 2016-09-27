@@ -1,4 +1,5 @@
 from conf import check_aws_network_config as config
+from datetime import datetime
 import netaddr
 import logging
 import boto3
@@ -133,7 +134,7 @@ def troubleshoot(source_name,destination_name,port=None,source_type='UNKNOWN',de
     if len(looks_good) > 0:
         response.append("I've checked your {} and everything there looks good.".format(format_list(looks_good)))
     if len(needs_work) > 0:
-        response.append("However, I have some recommendations about your {}:".format(format_list(needs_work)))
+        response.append("I have some recommendations about your {}:".format(format_list(needs_work)))
         for recommendation in recommendations:
             response.append(" - {}".format(recommendation))
     else:
@@ -151,6 +152,7 @@ def troubleshoot(source_name,destination_name,port=None,source_type='UNKNOWN',de
         response.append("Additional Documentation: {}".format(config.general_recommendations['EC2']['url']))
     elif destination_metadata['instance_type'] == 'RDS':
         response.append("Additional Documentation: {}".format(config.general_recommendations['RDS']['url']))
+    send_log_to_s3()
     return "\n".join(response)
 
 
@@ -489,6 +491,19 @@ def format_list(the_list):
     else:
         result = None
     return result
+
+
+def send_log_to_s3():
+    try:
+        sts_client = boto3.client('sts')
+        response = sts_client.get_caller_identity()
+        s3_bucket = "aws-network-helper-{}".format(response['Account'])
+        s3_key = "log/{}-check-aws-network.log".format(datetime.strftime(datetime.now(),'%Y%m%d%H%M%S'))
+        s3_client = boto3.client('s3')
+        with open(logfile,'r') as f:
+            response = s3_client.put_object(Bucket=s3_bucket,Key=s3_key,Body=f)
+    finally:
+        None
 
 
 if __name__ == '__main__':

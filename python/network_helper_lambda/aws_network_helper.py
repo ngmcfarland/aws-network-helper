@@ -66,10 +66,10 @@ def validate_slack_domain(response_url):
 def match_input(user_input):
     logger.debug("Matching text: {}".format(user_input))
     match_found = False
-    match1 = re.compile(r"^(why can\'t i|i (can\'t|cannot)|help me|i want to) connect to ([a-z0-9\-\_\+\=\.\:\/\@\s]*) from ([a-z0-9\-\_\+\=\.\:\/\@\s]*) on (tcp|udp|icmp)?\s?port (\d+)\??$", re.IGNORECASE)
-    match2 = re.compile(r"^(why can\'t i|i (can\'t|cannot)|help me|i want to) connect to ([a-z0-9\-\_\+\=\.\:\/\@\s]*) from ([a-z0-9\-\_\+\=\.\:\/\@\s]*)\??$", re.IGNORECASE)
-    match3 = re.compile(r"^troubleshoot (the|my)?\s?connection between ([a-z0-9\-\_\+\=\.\:\/\@\s]*) and ([a-z0-9\-\_\+\=\.\:\/\@\s]*) on (tcp|udp|icmp)?\s?port (\d+)$",re.IGNORECASE)
-    match4 = re.compile(r"^troubleshoot (the|my)?\s?connection between ([a-z0-9\-\_\+\=\.\:\/\@\s]*) and ([a-z0-9\-\_\+\=\.\:\/\@\s]*)$",re.IGNORECASE)
+    match1 = re.compile(r"^(why cant i|i (cant|cannot)|help me|i want to) connect to ([a-z0-9\-\_\+\=\.\:\/\@\s]*) from ([a-z0-9\-\_\+\=\.\:\/\@\s]*) on (tcp|udp|icmp)?\s?port (\d+)\??$", re.IGNORECASE)
+    match2 = re.compile(r"^(why cant i|i (cant|cannot)|help me|i want to) connect to ([a-z0-9\-\_\+\=\.\:\/\@\s]*) from ([a-z0-9\-\_\+\=\.\:\/\@\s]*)\??$", re.IGNORECASE)
+    match3 = re.compile(r"^troubleshoot (the|my)?\s?connection between ([a-z0-9\-\_\+\=\.\:\/\@\s]*) and ([a-z0-9\-\_\+\=\.\:\/\@\s]*) on (tcp|udp|icmp)?\s?port (\d+)\.?$",re.IGNORECASE)
+    match4 = re.compile(r"^troubleshoot (the|my)?\s?connection between ([a-z0-9\-\_\+\=\.\:\/\@\s]*) and ([a-z0-9\-\_\+\=\.\:\/\@\s]*)\.?$",re.IGNORECASE)
     if match1.match(user_input):
         result = match1.match(user_input)
         source_instance = result.group(4)
