@@ -177,12 +177,27 @@ def troubleshoot(source_name,destination_name,port=None,source_type='UNKNOWN',de
             elif destination_metadata['instance_type'] == 'RDS':
                 for recommendation in config.general_recommendations['RDS']['recommendations']:
                     response.append(" - {}".format(recommendation))
+            elif destination_metadata['instance_type'] == 'AWS':
+                for recommendation in config.general_recommendations['AWS']['recommendations']:
+                    response.append(" - {}".format(recommendation))
+            elif destination_metadata['instance_type'] == 'WEB':
+                for recommendation in config.general_recommendations['WEB']['recommendations']:
+                    response.append(" - {}".format(recommendation))
         else:
             response.append("Based on everything I've looked at, you should be able to connect.")
     if destination_metadata['instance_type'] == 'EC2':
         response.append("Additional Documentation: {}".format(config.general_recommendations['EC2']['url']))
     elif destination_metadata['instance_type'] == 'RDS':
         response.append("Additional Documentation: {}".format(config.general_recommendations['RDS']['url']))
+    elif destination_metadata['instance_type'] == 'AWS':
+        response.append("Additional Documentation: {}".format(config.general_recommendations['AWS']['url']))
+    else:
+        if source_metadata['instance_type'] == 'EC2':
+            response.append("Additional Documentation: {}".format(config.general_recommendations['EC2']['url']))
+        elif source_metadata['instance_type'] == 'RDS':
+            response.append("Additional Documentation: {}".format(config.general_recommendations['RDS']['url']))
+        elif source_metadata['instance_type'] == 'AWS':
+            response.append("Additional Documentation: {}".format(config.general_recommendations['AWS']['url']))
     return "\n".join(response)
 
 
