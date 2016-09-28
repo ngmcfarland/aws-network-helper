@@ -23,6 +23,7 @@ def troubleshoot(source_name,destination_name,port=None,source_type='UNKNOWN',de
     looks_good = []
     needs_work = []
     recommendations = []
+    error_messages = []
     #
     # Get metadata for source and destination instances
     logging.info("Starting metadata gathering for {} and {}".format(source_name,destination_name))
@@ -30,6 +31,7 @@ def troubleshoot(source_name,destination_name,port=None,source_type='UNKNOWN',de
     if 'error_type' in source_metadata:
         logging.error("Error in obtaining metadata for {}:".format(source_name))
         logging.error("{}: {}".format(source_metadata['error_type'],source_metadata['error_msg']))
+        error_messages.append("I am not able to retrieve metadata for \"{}\" because {}".format(source_name,source_metadata['error_msg']))
         proceed = False
     else:
         logging.info("Obtained metadata for {} successfully".format(source_name))
@@ -38,6 +40,7 @@ def troubleshoot(source_name,destination_name,port=None,source_type='UNKNOWN',de
     if 'error_type' in destination_metadata:
         logging.error("Error in obtaining metadata for {}:".format(destination_name))
         logging.error("{}: {}".format(destination_metadata['error_type'],destination_metadata['error_msg']))
+        error_messages.append("I am not able to retrieve metadata for \"{}\" because {}".format(destination_name,destination_metadata['error_msg']))
         proceed = False
     else:
         logging.info("Obtained metadata for {} successfully".format(destination_name))
@@ -48,7 +51,8 @@ def troubleshoot(source_name,destination_name,port=None,source_type='UNKNOWN',de
         logging.info("Checking if {} and {} are in the same AWS VPC".format(source_name,destination_name))
         if source_metadata['vpc_id'] != destination_metadata['vpc_id']:
             logging.error("{} and {} are not in the same VPC. Cross VPC connections are not supported by this script".format(source_name,destination_name))
-            return "I'm sorry. These two instances are not in the same VPC. I can only troubleshoot connections for instances in the same VPC."
+            error_messages.append("{} and {} are not in the same VPC. I can only troubleshoot connections for instances in the same VPC.".format(source_name,destination_name))
+            proceed = False
         else:
             logging.info("{} and {} are in the same VPC ({})".format(source_name,destination_name,source_metadata['vpc_id']))
     #
@@ -63,6 +67,7 @@ def troubleshoot(source_name,destination_name,port=None,source_type='UNKNOWN',de
                     port = 3389
                 else:
                     logging.error("No default port known for EC2 platform {}".format(destination_metadata['platform']))
+                    error_messages.append("I don't know of a default port for EC2 platform: \"{}\"".format(destination_metadata['platform']))
                     proceed = False
             elif destination_metadata['instance_type'] == 'RDS':
                 if 'port' in destination_metadata:
@@ -78,6 +83,7 @@ def troubleshoot(source_name,destination_name,port=None,source_type='UNKNOWN',de
                         port = 1433
                     else:
                         logging.error("No default port known for RDS engine {}".format(destination_metadata['engine']))
+                        error_messages.append("I don't know of a default port for RDS engine: \"{}\"".format(destination_metadata['engine']))
                         proceed = False
             elif destination_metadata['instance_type'] == 'WEB':
                 port = 'WEB'
@@ -100,11 +106,9 @@ def troubleshoot(source_name,destination_name,port=None,source_type='UNKNOWN',de
             if not source_health['healthy']:
                 logging.info("Source instance {} is unavailable with a status of '{}'".format(source_name,source_health['status']))
                 recommendations.append("Check health of {}. Current status: {}".format(source_name,source_health['status']))
-                proceed = False
             if not destination_health['healthy']:
                 logging.info("Destination instance {} is unavailable with a status of '{}'".format(destination_name,destination_health['status']))
                 recommendations.append("Check health of {}. Current status: {}".format(destination_name,destination_health['status']))
-                proceed = False
     #
     # Check what type of traffic to analyze
     if proceed:
@@ -146,8 +150,9 @@ def troubleshoot(source_name,destination_name,port=None,source_type='UNKNOWN',de
                 logging.info("Getting metadata for network gateway")
                 gateway_metadata = get_instance_metadata(destination_metadata['subnet_id'],'GATEWAY')
                 if 'error_type' in gateway_metadata:
-                    logging.error("Error in obtaining metadata for {}:".format(destination_name))
+                    logging.error("Error in obtaining metadata for gateway associated with {}:".format(destination_metadata['subnet_id']))
                     logging.error("{}: {}".format(gateway_metadata['error_type'],gateway_metadata['error_msg']))
+                    error_messages.append("I am not able to retrieve metadata for the gateway associated with subnet \"{}\" because {}".format(destination_metadata['subnet_id'],destination_metadata['error_msg']))
                 else:
                     recommendations,needs_work,looks_good = check_web_traffic(source_metadata,destination_metadata,gateway_metadata,web_traffic_direction,port,ip_protocol,recommendations,needs_work,looks_good)
             elif destination_metadata['instance_type'] in ['WEB','AWS']:
@@ -156,48 +161,52 @@ def troubleshoot(source_name,destination_name,port=None,source_type='UNKNOWN',de
                 logging.info("Getting metadata for network gateway")
                 gateway_metadata = get_instance_metadata(source_metadata['subnet_id'],'GATEWAY')
                 if 'error_type' in gateway_metadata:
-                    logging.error("Error in obtaining metadata for {}:".format(destination_name))
+                    logging.error("Error in obtaining metadata for gateway associated with {}:".format(destination_metadata['subnet_id']))
                     logging.error("{}: {}".format(gateway_metadata['error_type'],gateway_metadata['error_msg']))
+                    error_messages.append("I am not able to retrieve metadata for the gateway associated with subnet \"{}\" because {}".format(destination_metadata['subnet_id'],destination_metadata['error_msg']))
                 else:
                     recommendations,needs_work,looks_good = check_web_traffic(source_metadata,destination_metadata,gateway_metadata,web_traffic_direction,port,ip_protocol,recommendations,needs_work,looks_good)
     #
     # Compile results
-    if len(looks_good) > 0:
-        response.append("I've checked your {} and everything there looks good.".format(format_list(looks_good)))
-    if len(needs_work) > 0:
-        response.append("I have some recommendations about your {}:".format(format_list(needs_work)))
-        for recommendation in recommendations:
-            response.append(" - {}".format(recommendation))
+    if len(error_messages) > 0:
+        response.append("I'm sorry, {}. If you can help me troubleshoot these issues, I can try taking a look at your network again.".format(format_list(error_messages)))
     else:
-        if destination_metadata['instance_type'] != 'UNKNOWN':
-            response.append("Based on everything I've looked at, you should be able to connect. If you are still having issues, here are some general things to check:")
-            if destination_metadata['instance_type'] == 'EC2':
-                for recommendation in config.general_recommendations['EC2']['recommendations']:
-                    response.append(" - {}".format(recommendation))
-            elif destination_metadata['instance_type'] == 'RDS':
-                for recommendation in config.general_recommendations['RDS']['recommendations']:
-                    response.append(" - {}".format(recommendation))
-            elif destination_metadata['instance_type'] == 'AWS':
-                for recommendation in config.general_recommendations['AWS']['recommendations']:
-                    response.append(" - {}".format(recommendation))
-            elif destination_metadata['instance_type'] == 'WEB':
-                for recommendation in config.general_recommendations['WEB']['recommendations']:
-                    response.append(" - {}".format(recommendation))
+        if len(looks_good) > 0:
+            response.append("I've checked your {} and everything there looks good.".format(format_list(looks_good)))
+        if len(needs_work) > 0:
+            response.append("I have some recommendations about your {}:".format(format_list(needs_work)))
+            for recommendation in recommendations:
+                response.append(" - {}".format(recommendation))
         else:
-            response.append("Based on everything I've looked at, you should be able to connect.")
-    if destination_metadata['instance_type'] == 'EC2':
-        response.append("Additional Documentation: {}".format(config.general_recommendations['EC2']['url']))
-    elif destination_metadata['instance_type'] == 'RDS':
-        response.append("Additional Documentation: {}".format(config.general_recommendations['RDS']['url']))
-    elif destination_metadata['instance_type'] == 'AWS':
-        response.append("Additional Documentation: {}".format(config.general_recommendations['AWS']['url']))
-    else:
-        if source_metadata['instance_type'] == 'EC2':
+            if destination_metadata['instance_type'] != 'UNKNOWN':
+                response.append("Based on everything I've looked at, you should be able to connect. If you are still having issues, here are some general things to check:")
+                if destination_metadata['instance_type'] == 'EC2':
+                    for recommendation in config.general_recommendations['EC2']['recommendations']:
+                        response.append(" - {}".format(recommendation))
+                elif destination_metadata['instance_type'] == 'RDS':
+                    for recommendation in config.general_recommendations['RDS']['recommendations']:
+                        response.append(" - {}".format(recommendation))
+                elif destination_metadata['instance_type'] == 'AWS':
+                    for recommendation in config.general_recommendations['AWS']['recommendations']:
+                        response.append(" - {}".format(recommendation))
+                elif destination_metadata['instance_type'] == 'WEB':
+                    for recommendation in config.general_recommendations['WEB']['recommendations']:
+                        response.append(" - {}".format(recommendation))
+            else:
+                response.append("Based on everything I've looked at, you should be able to connect.")
+        if destination_metadata['instance_type'] == 'EC2':
             response.append("Additional Documentation: {}".format(config.general_recommendations['EC2']['url']))
-        elif source_metadata['instance_type'] == 'RDS':
+        elif destination_metadata['instance_type'] == 'RDS':
             response.append("Additional Documentation: {}".format(config.general_recommendations['RDS']['url']))
-        elif source_metadata['instance_type'] == 'AWS':
+        elif destination_metadata['instance_type'] == 'AWS':
             response.append("Additional Documentation: {}".format(config.general_recommendations['AWS']['url']))
+        else:
+            if source_metadata['instance_type'] == 'EC2':
+                response.append("Additional Documentation: {}".format(config.general_recommendations['EC2']['url']))
+            elif source_metadata['instance_type'] == 'RDS':
+                response.append("Additional Documentation: {}".format(config.general_recommendations['RDS']['url']))
+            elif source_metadata['instance_type'] == 'AWS':
+                response.append("Additional Documentation: {}".format(config.general_recommendations['AWS']['url']))
     return "\n".join(response)
 
 
@@ -215,17 +224,17 @@ def get_ec2_metadata(instance_name):
             instance_found = True
             instance_type = 'EC2'
             if len(matching_ec2s['Reservations'][0]['Instances']) > 1:
-                instance_metadata = {'error_type':'ERROR','error_msg':'Multiple EC2 instances found with instance name {}'.format(instance_name)}
+                instance_metadata = {'error_type':'ERROR','error_msg':'I found multiple EC2 instances with the name "{}"'.format(instance_name)}
             else:
                 instance_metadata = matching_ec2s['Reservations'][0]['Instances'][0]
             return instance_found,instance_type,instance_metadata
         elif len(matching_ec2s['Reservations']) > 1:
             instance_found = True
             instance_type = 'EC2'
-            instance_metadata = {'error_type':'ERROR','error_msg':'Multiple EC2 instances found with instance name {}'.format(instance_name)}
+            instance_metadata = {'error_type':'ERROR','error_msg':'I found multiple EC2 instances with the name "{}"'.format(instance_name)}
             return instance_found,instance_type,instance_metadata
         else:
-            instance_metadata = {'error_type':'ERROR','error_msg':'No EC2 instance found with name/id {}'.format(instance_name)}
+            instance_metadata = {'error_type':'ERROR','error_msg':'I didn\'t find any EC2 instances with the name/id: "{}"'.format(instance_name)}
             return instance_found,'UNKNOWN',instance_metadata
     except:
         return instance_found,'UNKNOWN',{'error_type':sys.exc_info()[0],'error_msg':sys.exc_info()[1]}
@@ -244,10 +253,10 @@ def get_rds_metadata(instance_name):
         elif len(matching_rds['DBInstances']) > 1:
             instance_found = True
             instance_type = 'RDS'
-            instance_metadata = {'error_type':'ERROR','error_msg':'Multiple RDS instances found with name {}'.format(instance_name)}
+            instance_metadata = {'error_type':'ERROR','error_msg':'I found multiple RDS instances with the name "{}"'.format(instance_name)}
             return instance_found,instance_type,instance_metadata
         else:
-            instance_metadata = {'error_type':'ERROR','error_msg':'Did not find RDS instance with name {}'.format(instance_name)}
+            instance_metadata = {'error_type':'ERROR','error_msg':'I did not find an RDS instance with the name "{}"'.format(instance_name)}
             return instance_found,'UNKNOWN',instance_metadata
     except:
         return instance_found,'UNKNOWN',{'error_type':sys.exc_info()[0],'error_msg':sys.exc_info()[1]}
@@ -274,11 +283,11 @@ def get_gateway_metadata(subnet_id):
                         gateway_found = True
                         break
         if not gateway_metadata:
-            gateway_metadata = {'error_type':'GATEWAY_NOT_FOUND','error_msg':'Could not identify gateway in route table {}'.format(route_table['RouteTables'][0]['RouteTableId'])}
+            gateway_metadata = {'error_type':'GATEWAY_NOT_FOUND','error_msg':'I could not identify a gateway in the route table "{}"'.format(route_table['RouteTables'][0]['RouteTableId'])}
     elif len(route_table['RouteTables']) == 0:
-        gateway_metadata = {'error_type':'NO_ROUTE_TABLE','error_msg':'Could not find route table for subnet: {}'.format(subnet_id)}
+        gateway_metadata = {'error_type':'NO_ROUTE_TABLE','error_msg':'I could not find a route table for subnet "{}"'.format(subnet_id)}
     else:
-        gateway_metadata = {'error_type':'MULTIPLE_ROUTE_TABLES','error_msg':'Found multiple route tables for subnet: {}'.format(subnet_id)}
+        gateway_metadata = {'error_type':'MULTIPLE_ROUTE_TABLES','error_msg':'I found multiple route tables for subnet "{}"'.format(subnet_id)}
     return gateway_found,'GATEWAY',gateway_metadata
 
 
@@ -300,7 +309,7 @@ def get_instance_metadata(instance_name,instance_type='UNKNOWN'):
                     if not instance_found:
                         instance_found = False
                         instance_type = 'UNKNOWN'
-                        instance_metadata = {'error_type':'ERROR','error_msg':'Did not find EC2 or RDS instance with name {}'.format(instance_name)}
+                        instance_metadata = {'error_type':'INSTANCE_MATCH_ERROR','error_msg':'I did not find an EC2 or RDS instance with the name "{}"'.format(instance_name)}
         elif instance_type == 'EC2':
             instance_found,instance_type,instance_metadata = get_ec2_metadata(instance_name)
         elif instance_type == 'RDS':
@@ -310,7 +319,7 @@ def get_instance_metadata(instance_name,instance_type='UNKNOWN'):
         else:
             instance_found = False
             instance_type = 'UNKNOWN'
-            instance_metadata = {'error_type':'ERROR','error_msg':'Did not find EC2 or RDS instance with name {}'.format(instance_name)}
+            instance_metadata = {'error_type':'UNKOWN_INSTANCE_TYPE_ERROR','error_msg':'an unknown instance type was provided: "{}"'.format(instance_type)}
         if instance_found and 'error_type' not in instance_metadata:
             metadata = parse_metadata(instance_name,instance_metadata,instance_type)
         else:
@@ -360,7 +369,7 @@ def parse_metadata(instance_name,instance_metadata,instance_type):
         elif instance_type == 'GATEWAY':
             return instance_metadata
         else:
-            return {'error_type':'ERROR','error_msg':'Instance type not recognized!'}
+            return {'error_type':'ERROR','error_msg':'the instance type was not recognized'}
     except:
         return {'error_type':sys.exc_info()[0],'error_msg':sys.exc_info()[1]}
 

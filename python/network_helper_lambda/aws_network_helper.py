@@ -12,35 +12,46 @@ logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
 def lambda_handler(event,context):
-    lambda_message = json.loads(event['Records'][0]['Sns']['Message'])
+    if 'Records' in event:
+        message_body = json.loads(event['Records'][0]['Sns']['Message'])
+    else:
+        if isinstance(event,str):
+            message_body = json.loads(event)
+        elif isinstance(event,dict):
+            message_body = event
     logger.info("Starting Lambda...")
     s3_conf = get_config()
-    slack_response_url = decrypt_config_value(lambda_message['response_url'],s3_conf['kms_region'])
-    if not validate_slack_domain(slack_response_url):
-        raise Exception("Invalid Slack Response URL!")
-    if lambda_message['command'] == '/aws-network':
-        logger.info("Slack Slash Command: {}".format(lambda_message['command']))
-        if lambda_message['text'].upper() == 'HELP':
-            response = conf.help_message
-        else:
-            r = requests.post(slack_response_url,data=json.dumps({'text':'Hold on, let me check some things...'}))
-            results = match_input(lambda_message['text'])
-            logger.debug("Results from match_input: {}".format(results))
-            if results['match']:
-                if results['source'] and results['destination'] and results['port'] and results['ip_protocol']:
-                    response = check_aws_network.troubleshoot(source_name=results['source'],destination_name=results['destination'],port=results['port'],ip_protocol=results['ip_protocol'])
-                elif results['source'] and results['destination'] and results['port']:
-                    response = check_aws_network.troubleshoot(source_name=results['source'],destination_name=results['destination'],port=results['port'])
-                else:
-                    response = check_aws_network.troubleshoot(source_name=results['source'],destination_name=results['destination'])
-            else:
-                response = "I'm sorry, I don't recognize what you're asking."
+    if message_body['response_type'].upper() == 'SLACK':
+        slack_response_url = decrypt_config_value(message_body['response_url'],s3_conf['kms_region'])
+        if not validate_slack_domain(slack_response_url):
+            raise Exception("Invalid Slack Response URL!")
+        if not message_body['command'] == '/aws-network':
+            response = "I'm sorry, I don't recognize the command: {}".format(command)
+        logger.info("Slack Slash Command: {}".format(message_body['command']))
+    if message_body['text'].upper() == 'HELP':
+        response = conf.help_message
     else:
-        response = "I'm sorry, I don't recognize the command: {}".format(command)
-    response_body = {'text':response}
-    logger.info("Sending response: {}".format(response_body))
-    r = requests.post(slack_response_url,data=json.dumps(response_body))
-    logger.info("Response from Slack response URL post: {}".format(r.text))
+        if message_body['response_type'].upper() == 'SLACK':
+            r = requests.post(slack_response_url,data=json.dumps({'text':'Hold on, let me check some things...'}))
+        results = match_input(message_body['text'])
+        logger.debug("Results from match_input: {}".format(results))
+        if results['match']:
+            if results['source'] and results['destination'] and results['port'] and results['ip_protocol']:
+                response = check_aws_network.troubleshoot(source_name=results['source'],destination_name=results['destination'],port=results['port'],ip_protocol=results['ip_protocol'])
+            elif results['source'] and results['destination'] and results['port']:
+                response = check_aws_network.troubleshoot(source_name=results['source'],destination_name=results['destination'],port=results['port'])
+            else:
+                response = check_aws_network.troubleshoot(source_name=results['source'],destination_name=results['destination'])
+        else:
+            response = "I'm sorry, I don't recognize what you're asking."
+    if message_body['response_type'].upper() == 'SLACK':
+        response_body = {'text':response}
+        logger.info("Sending response: {}".format(response_body))
+        r = requests.post(slack_response_url,data=json.dumps(response_body))
+        logger.info("Response from Slack response URL post: {}".format(r.text))
+    elif message_body['response_type'].upper() == 'RETURN':
+        logger.info("Sending response: {}".format(response))
+        return response
 
 
 def get_config():
