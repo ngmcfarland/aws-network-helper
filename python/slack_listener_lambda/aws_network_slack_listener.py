@@ -15,7 +15,7 @@ def lambda_handler(event, context):
     if params['token'][0] != expected_token or params['team_id'][0] != expected_team:
         raise Exception("Invalid request!")
     slack_response_url = encrypt_config_value(params['response_url'][0],conf['kms_key_alias'],conf['kms_region'])
-    event_text = params['text'][0].replace("'","")
+    event_text = re.sub(r'[^\x00-\x7F]+','', params['text'][0])
     slack_event = {'command':params['command'][0],'text':event_text,'response_url':slack_response_url}
     sns_message = {'default':'I received a message','lambda':json.dumps(slack_event)}
     response = sns_client.publish(TopicArn=conf['sns_arn'],Message=json.dumps(sns_message),MessageStructure='json')
