@@ -3,8 +3,10 @@ Here are some examples:
 
 USER> I cannot connect to my-awesome-ec2-server from my-other-awesome-ec2-server on port 22
 or
-USER> Help me connect to my-awesome-rds-instance from my-awesome-ec2-server on TCP port 5432
+USER> Help me connect to my-wonderful-rds-instance from my-awesome-ec2-server on TCP port 5432
 or
-USER> Why can't I connect to my-awesome-rds-instance from my-other-awesome-ec2-server?
+USER> Why can't I connect to s3 from my-awesome-ec2-server?
+or
+USER> I can't connect to my-wonderful-rds-instance from my computer.
                 
 In any of your statements, you can specify the port you are trying to connect on, and even the IP protocol you're trying to connect with. However, I'm pretty familiar with the standard ports (and even the ephemeral ports!) for Linux servers, Windows servers, and most database types, so if you don't specify a port, I'll take a stab at it. So let's start troubleshooting!!!"""

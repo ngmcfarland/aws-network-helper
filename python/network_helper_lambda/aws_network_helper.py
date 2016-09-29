@@ -25,7 +25,7 @@ def lambda_handler(event,context):
         slack_response_url = decrypt_config_value(message_body['response_url'],s3_conf['kms_region'])
         if not validate_slack_domain(slack_response_url):
             raise Exception("Invalid Slack Response URL!")
-        if not message_body['command'] == '/aws-network':
+        if not message_body['command'] == s3_conf['slack_command']:
             response = "I'm sorry, I don't recognize the command: {}".format(command)
         logger.info("Slack Slash Command: {}".format(message_body['command']))
     if message_body['text'].upper() == 'HELP':

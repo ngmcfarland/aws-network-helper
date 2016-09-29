@@ -1,3 +1,4 @@
+import re
 import json
 import boto3
 import base64
@@ -9,10 +10,9 @@ def lambda_handler(event, context):
 
     conf = get_config()
     expected_token = decrypt_config_value(conf['slack_token'],conf['kms_region'])
-    expected_team = decrypt_config_value(conf['slack_team'],conf['kms_region'])
     
     sns_client = boto3.client('sns')
-    if params['token'][0] != expected_token or params['team_id'][0] != expected_team:
+    if params['token'][0] != expected_token:
         raise Exception("Invalid request!")
     slack_response_url = encrypt_config_value(params['response_url'][0],conf['kms_key_alias'],conf['kms_region'])
     event_text = re.sub(r'[^\x00-\x7F]+','', params['text'][0])

@@ -1,7 +1,7 @@
 {
-    "slack_token": "AQECAHjpCxkbhwuw44AW2mftgOPcqx0yLYrrcDQZQy6KRDIzWAAAAHYwdAYJKoZIhvcNAQcGoGcwZQIBADBgBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDLwakYmX2gxovpvANgIBEIAzJL90NY/n1koaAHpJHNmERl/HCHWoC39pSKE3IhpvXTdpg/5S0gzi1msaWl/qPkJaSZCc",
-    "slack_team": "AQECAHjpCxkbhwuw44AW2mftgOPcqx0yLYrrcDQZQy6KRDIzWAAAAGcwZQYJKoZIhvcNAQcGoFgwVgIBADBRBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDCK3AumvJye9MmFL9AIBEIAkITSQP57s4g9/+K/fRDcOcaS+nOIaHouMRcqAXRWmOeN0cNlm",
+    "slack_token": "AQECAHgK9/M/UZHwM4hOsXvdf0E0ICzlqzdPpXJ8xnoZeqUdcAAAAHYwdAYJKoZIhvcNAQcGoGcwZQIBADBgBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDJnQZiNQBQcT5H0SmgIBEIAzP5fVTg50eTA/xU5xuPDOqRDusJ2l3aJVm1qCVSoJRa+PhCpG6KKJT1Rc554DUGh1ax6b",
+    "slack_command": "/aws-helper",
     "kms_region": "us-east-1",
     "kms_key_alias": "aws-network-helper-key",
-    "sns_arn": "arn:aws:sns:us-east-1:727646477132:aws-network-helper"
+    "sns_arn": "arn:aws:sns:us-east-1:302220390023:aws-network-helper"
 }
