@@ -124,6 +124,7 @@ def match_input(user_input):
         destination_instance = result.group(3)
         ip_protocol = None
         port = None
+        match_found = True
     if match_found:
         results = {'match':True,'source':source_instance,'destination':destination_instance,'port':port,'ip_protocol':ip_protocol}
     else:
