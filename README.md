@@ -52,3 +52,7 @@ An SNS topic is used between the Slack listener Lambda and the network helper La
 S3 is used to provide the user with an externalized configuration file for easier changes. The Slack token, SNS ARN, slash command, and other variables can be changed without re-compiling your Lambda
 
 KMS is used to decrypt the Slack token stored in the configuration file upon use, and is also used to encrypt/decrypt the response URL as it gets passed through SNS. This is an added layer of security.
+
+## Installation
+
+Please follow the installation instructions in the AWS Network Helper documentation: [AWS Network Helper Documentation](/docs/AWS Network Helper.docx)
