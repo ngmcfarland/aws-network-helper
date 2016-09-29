@@ -40,7 +40,7 @@ AWS Services Used:
 * Lambda
 * IAM & KMS
 
-![Architecture Diagram](https://github.com/ngmcfarland/aws-network-helper/docs/AWS%20Network%20Helper%20Architecture.png "AWS Network Helper Architecture Diagram")
+![Architecture Diagram](aws-network-helper/docs/AWS Network Helper Architecture.png?raw=true "AWS Network Helper Architecture Diagram")
 
 An SNS topic is used between the Slack listener Lambda and the network helper Lambda so that in the future, different listeners could be deployed that use interfaces other than Slack. Other interfaces could include, but are not limited to:
 
