@@ -1,5 +1,6 @@
 # AWS Network Helper
 Project for submission to the 2016 AWS Serverless Chatbot Competition
+[AWS Network Helper Demo Video](https://youtu.be/KB74FRAYTX4)
 
 ## Goals & Features
 The goal of this project is to provide an AWS network troubleshooting script that runs on a serverless architecture, and can be interacted with via Slack as a chat bot. In simple terms, the goal is to be able to respond to input like:
