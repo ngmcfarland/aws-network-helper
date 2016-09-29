@@ -1,0 +1,45 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "s3privs",
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject",
+                "s3:GetObjectVersion"
+            ],
+            "Resource": [
+                "<arn_of_s3_bucket>"
+            ]
+        },
+        {
+            "Sid": "snsprivs",
+            "Effect": "Allow",
+            "Action": [
+                "sns:ConfirmSubscription",
+                "sns:GetEndpointAttributes",
+                "sns:GetSubscriptionAttributes",
+                "sns:GetTopicAttributes",
+                "sns:Publish",
+                "sns:Subscribe"
+            ],
+            "Resource": [
+                "<arn_of_sns_topic>"
+            ]
+        },
+        {
+            "Sid": "kmsprivs",
+            "Effect": "Allow",
+            "Action": [
+                "kms:Decrypt",
+                "kms:DescribeKey",
+                "kms:Encrypt",
+                "kms:ListAliases",
+                "kms:ListKeys"
+            ],
+            "Resource": [
+                "<arn_of_kms_key>"
+            ]
+        }
+    ]
+}

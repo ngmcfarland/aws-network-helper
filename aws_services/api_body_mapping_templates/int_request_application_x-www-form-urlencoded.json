@@ -1,0 +1,4 @@
+{
+    "headers":"X-Amz-Invocation-Type:Event",
+    "body":$input.json("$")
+}
