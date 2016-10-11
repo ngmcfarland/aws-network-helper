@@ -1,5 +1,5 @@
 usage = "python check_aws_network.py <source_name> <destination_name> [<port> <source_type> <destination_type> <ip_protocol>]"
-logging_file = '/tmp/check_aws_network.log'
+logging_file = 'check_aws_network.log'
 logging_level = 'INFO'
 ephemeral_index = {'LINUX':{'from':32768,'to':61000},'WINDOWS':{'from':49152,'to':65535},'UNKNOWN':{'from':1024,'to':65535}}
 ec2_general_recommendations = ["Verify that the keypair you are using matches the keypair for your destination.","If you are trying to connect to your destination instance from inside the VPC, make sure you are using the private IP address.","Check the CPU load on your destination instance using CloudWatch to make sure that your instance is truly healthy."]
