@@ -483,20 +483,21 @@ def check_web_traffic(source_metadata,destination_metadata,gateway_metadata,web_
                 for recommendation in recommendations:
                     logging.info(" - {}".format(recommendation))
     elif web_traffic_direction == 'OUT':
-        if source_metadata['instance_type'] == 'EC2':
-            if 'public_ip' not in source_metadata:
-                needs_work.append('EC2 instance')
-                recommendations.append("Your EC2 instance does not have a public IP address which is required for return traffic through your internet gateway.")
-                logging.info("Target instance does not have a public IP address")
-            else:
-                logging.info("Target instance has public IP address")
-        elif source_metadata['instance_type'] == 'RDS':
-            if not source_metadata['publicly_accessible']:
-                needs_work.append('RDS instance')
-                recommendations.append("Your RDS instance is not publicly accessible which is required for return traffic through your internet gateway.")
-                logging.info("Target RDS is not set to be publicly accessible")
-            else:
-                logging.info("Target RDS is publicly accessible")
+        if gateway_metadata['type'] == 'IGW':
+            if source_metadata['instance_type'] == 'EC2':
+                if 'public_ip' not in source_metadata:
+                    needs_work.append('EC2 instance')
+                    recommendations.append("Your EC2 instance does not have a public IP address which is required for return traffic through your internet gateway.")
+                    logging.info("Target instance does not have a public IP address")
+                else:
+                    logging.info("Target instance has public IP address")
+            elif source_metadata['instance_type'] == 'RDS':
+                if not source_metadata['publicly_accessible']:
+                    needs_work.append('RDS instance')
+                    recommendations.append("Your RDS instance is not publicly accessible which is required for return traffic through your internet gateway.")
+                    logging.info("Target RDS is not set to be publicly accessible")
+                else:
+                    logging.info("Target RDS is publicly accessible")
         if port == 'WEB':
             web_ports = [80,443]
             acls_look_good = []
